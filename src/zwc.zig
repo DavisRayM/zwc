@@ -12,6 +12,7 @@ pub const PrintOptions = enum {
     Unset,
 };
 
+/// Return value must be deallocated
 pub fn run(allocator: Allocator, filename: ?[]const u8, opt: PrintOptions) ![]const u8 {
     var bytes: []u8 = undefined;
 
@@ -55,6 +56,7 @@ pub fn run(allocator: Allocator, filename: ?[]const u8, opt: PrintOptions) ![]co
     }
 }
 
+/// Return value must be deallocated
 fn readStdin(allocator: Allocator) ![]u8 {
     var arr = std.ArrayList(u8).init(allocator);
 
