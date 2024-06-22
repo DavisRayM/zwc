@@ -1,5 +1,5 @@
 const std = @import("std");
-const zwc = @import("root.zig");
+const zwc = @import("./root.zig").zwc;
 const mem = std.mem;
 const ArrayList = std.ArrayList;
 const usage =
