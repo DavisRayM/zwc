@@ -89,7 +89,7 @@ fn countWords(contents: []const u8) usize {
     var words: u64 = 0;
 
     for (contents) |c| {
-        if (c == '\n' or ascii.isWhitespace(c)) {
+        if (ascii.isWhitespace(c)) {
             if (characterSpotted) {
                 characterSpotted = false;
                 words += 1;
