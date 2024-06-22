@@ -46,6 +46,9 @@ pub fn main() !void {
             pcharacter = true;
         } else if (mem.eql(u8, arg, "-w")) {
             pwords = true;
+        } else if (mem.eql(u8, arg, "-h")) {
+            std.debug.print("{s}\n", .{usage});
+            return;
         } else {
             ifile = arg;
         }

@@ -99,5 +99,29 @@ fn countWords(contents: []const u8) usize {
         }
     }
 
+    if (characterSpotted) {
+        words += 1;
+    }
+
     return words;
+}
+
+test "expect countLines counts lines" {
+    const content: []const u8 =
+        \\ Hello there.
+        \\ This is a multi-line string....
+        \\ Yea that's pretty much it...
+        \\ Bye!
+    ;
+
+    try std.testing.expectEqual(4, countLines(content));
+}
+
+test "expect countWords counts words" {
+    const content: []const u8 =
+        \\ Abracadabra ? No, that's a bit off... Maybe it's Open Sesame ?
+        \\ Darn, I forgot the spell...
+    ;
+
+    try std.testing.expectEqual(17, countWords(content));
 }
