@@ -1,0 +1,6 @@
+# Zig related
+zig-out/
+.zig-cache/
+
+# Fixtures
+*.txt
