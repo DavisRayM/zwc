@@ -4,7 +4,15 @@ const Allocator = std.mem.Allocator;
 const unicode = std.unicode;
 const ascii = std.ascii;
 
-pub fn run(allocator: *Allocator, filename: ?[]const u8, pbytes: bool, plines: bool, pcharacter: bool, pwords: bool) !void {
+pub const PrintOptions = enum {
+    PrintBytes,
+    PrintLines,
+    PrintCharacters,
+    PrintWords,
+    Unset,
+};
+
+pub fn run(allocator: Allocator, filename: ?[]const u8, opt: PrintOptions) ![]const u8 {
     var bytes: []u8 = undefined;
 
     if (filename) |f| {
@@ -12,36 +20,43 @@ pub fn run(allocator: *Allocator, filename: ?[]const u8, pbytes: bool, plines: b
     } else {
         bytes = try readStdin(allocator);
     }
+    defer allocator.free(bytes);
 
-    const stdout = std.io.getStdOut().writer();
-    var stat: usize = undefined;
+    var stat: ?usize = null;
 
-    if (pbytes) {
-        stat = bytes.len;
-    } else if (plines) {
-        stat = countLines(bytes);
-    } else if (pcharacter) {
-        stat = try unicode.utf8CountCodepoints(bytes);
-    } else if (pwords) {
-        stat = countWords(bytes);
-    } else {
-        if (filename) |f| {
-            try stdout.print("{d} {d} {d} {s}\n", .{ countLines(bytes), countWords(bytes), bytes.len, f });
-        } else {
-            try stdout.print("{d} {d} {d}\n", .{ countLines(bytes), countWords(bytes), bytes.len });
-        }
-        return;
+    switch (opt) {
+        .PrintBytes => {
+            stat = bytes.len;
+        },
+        .PrintCharacters => {
+            stat = try unicode.utf8CountCodepoints(bytes);
+        },
+        .PrintLines => {
+            stat = mem.count(u8, bytes, "\n");
+        },
+        .PrintWords => {
+            stat = countWords(bytes);
+        },
+        .Unset => {},
     }
 
     if (filename) |f| {
-        try stdout.print("{d} {?s}\n", .{ stat, f });
+        if (stat) |s| {
+            return std.fmt.allocPrint(allocator, "{d} {s}", .{ s, f });
+        } else {
+            return try std.fmt.allocPrint(allocator, "{d} {d} {d} {s}", .{ countLines(bytes), countWords(bytes), bytes.len, f });
+        }
     } else {
-        try stdout.print("{d}\n", .{stat});
+        if (stat) |s| {
+            return try std.fmt.allocPrint(allocator, "{d}", .{s});
+        } else {
+            return try std.fmt.allocPrint(allocator, "{d} {d} {d}", .{ countLines(bytes), countWords(bytes), bytes.len });
+        }
     }
 }
 
-fn readStdin(allocator: *Allocator) ![]u8 {
-    var arr = std.ArrayList(u8).init(allocator.*);
+fn readStdin(allocator: Allocator) ![]u8 {
+    var arr = std.ArrayList(u8).init(allocator);
 
     var buffer: [1024]u8 = undefined;
     const stdin = std.io.getStdIn();
@@ -60,12 +75,13 @@ fn readStdin(allocator: *Allocator) ![]u8 {
     return arr.toOwnedSlice();
 }
 
-fn readFile(allocator: *Allocator, filename: []const u8) ![]u8 {
+/// Return value must be deallocated
+fn readFile(allocator: Allocator, filename: []const u8) ![]u8 {
     const file = try std.fs.cwd().openFile(filename, .{ .mode = .read_only });
     defer file.close();
 
     const stat = try file.stat();
-    const b = try file.readToEndAlloc(allocator.*, stat.size);
+    const b = try file.readToEndAlloc(allocator, stat.size);
     return b;
 }
 
@@ -104,6 +120,66 @@ fn countWords(contents: []const u8) usize {
     }
 
     return words;
+}
+
+test "expect run to work a as expected" {
+    const testContent =
+        \\ Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+        \\ incididunt ut labore et dolore magna aliqua. Nisi porta lorem mollis aliquam
+        \\ ut porttitor leo. Odio pellentesque diam volutpat commodo sed egestas. Quam
+        \\ nulla porttitor massa id neque. Hac habitasse platea dictumst vestibulum
+        \\ rhoncus est pellentesque. Quis risus sed vulputate odio ut enim blandit.
+        \\ Volutpat blandit aliquam etiam erat. Orci phasellus egestas tellus rutrum
+        \\ tellus pellentesque eu. Adipiscing commodo elit at imperdiet dui accumsan
+        \\ sit amet nulla. In cursus turpis massa tincidunt dui ut ornare lectus.
+        \\ Facilisis mauris sit amet massa vitae tortor condimentum lacinia quis. Nisi
+        \\ scelerisque eu ultrices vitae auctor eu augue ut lectus.
+    ;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const fixture = try tmp.dir.createFile("readfile_test.txt", .{});
+    try fixture.writeAll(testContent);
+    fixture.close();
+
+    const fixture_path = try tmp.dir.realpathAlloc(std.testing.allocator, "readfile_test.txt");
+    defer std.testing.allocator.free(fixture_path);
+
+    const actual = try run(std.testing.allocator, fixture_path, .Unset);
+    defer std.testing.allocator.free(actual);
+
+    var split = std.mem.split(u8, actual, " ");
+    try std.testing.expectEqualStrings("10", split.next().?);
+    try std.testing.expectEqualStrings("108", split.next().?);
+    try std.testing.expectEqualStrings("739", split.next().?);
+}
+
+test "expect readFile to read file contents" {
+    const testContent =
+        \\ Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+        \\ incididunt ut labore et dolore magna aliqua. Nisi porta lorem mollis aliquam
+        \\ ut porttitor leo. Odio pellentesque diam volutpat commodo sed egestas. Quam
+        \\ nulla porttitor massa id neque. Hac habitasse platea dictumst vestibulum
+        \\ rhoncus est pellentesque. Quis risus sed vulputate odio ut enim blandit.
+        \\ Volutpat blandit aliquam etiam erat. Orci phasellus egestas tellus rutrum
+        \\ tellus pellentesque eu. Adipiscing commodo elit at imperdiet dui accumsan
+        \\ sit amet nulla. In cursus turpis massa tincidunt dui ut ornare lectus.
+        \\ Facilisis mauris sit amet massa vitae tortor condimentum lacinia quis. Nisi
+        \\ scelerisque eu ultrices vitae auctor eu augue ut lectus.
+    ;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const fixture = try tmp.dir.createFile("readfile_test.txt", .{});
+    try fixture.writeAll(testContent);
+    fixture.close();
+
+    const fixture_path = try tmp.dir.realpathAlloc(std.testing.allocator, "readfile_test.txt");
+    defer std.testing.allocator.free(fixture_path);
+
+    const actual = try readFile(std.testing.allocator, fixture_path);
+    defer std.testing.allocator.free(actual);
+    try std.testing.expectEqualStrings(testContent, actual);
 }
 
 test "expect countLines counts lines" {

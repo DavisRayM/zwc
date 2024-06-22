@@ -23,13 +23,9 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    var allocator = arena.allocator();
+    const allocator = arena.allocator();
 
-    var pbytes: bool = false;
-    var plines: bool = false;
-    var pcharacter: bool = false;
-    var pwords: bool = false;
-
+    var pOption: zwc.PrintOptions = .Unset;
     var ifile: ?[]const u8 = null;
 
     var args = try std.process.argsWithAllocator(allocator);
@@ -39,13 +35,13 @@ pub fn main() !void {
 
     while (args.next()) |arg| {
         if (mem.eql(u8, arg, "-c")) {
-            pbytes = true;
+            pOption = .PrintBytes;
         } else if (mem.eql(u8, arg, "-l")) {
-            plines = true;
+            pOption = .PrintLines;
         } else if (mem.eql(u8, arg, "-m")) {
-            pcharacter = true;
+            pOption = .PrintCharacters;
         } else if (mem.eql(u8, arg, "-w")) {
-            pwords = true;
+            pOption = .PrintWords;
         } else if (mem.eql(u8, arg, "-h")) {
             std.debug.print("{s}\n", .{usage});
             return;
@@ -53,6 +49,9 @@ pub fn main() !void {
             ifile = arg;
         }
     }
+    const out = try zwc.run(allocator, ifile, pOption);
+    defer allocator.free(out);
 
-    try zwc.run(&allocator, ifile, pbytes, plines, pcharacter, pwords);
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("{s}\n", .{out});
 }
